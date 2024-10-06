@@ -4,78 +4,82 @@ from meross_iot.http_api import MerossHttpClient
 from meross_iot.model.enums import OnlineStatus
 import logging
 
-# Aktivieren der ausführlichen Protokollierung (optional)
+# Enable verbose logging (optional)
 logging.basicConfig(level=logging.INFO)
 
-EMAIL = 'Ihre_Email@example.com'
-PASSWORD = 'Ihr_Meross_Passwort'
+EMAIL = 'your_email@example.com'
+PASSWORD = 'your_meross_password'
 
 async def main():
-    # API-Basis-URL direkt angeben (anpassen, falls nötig)
-    api_base_url = 'https://iot.meross.com'  # Oder 'https://iot-eu.meross.com' für Europa
+    # Specify the API base URL directly (adjust if necessary)
+    api_base_url = 'https://iot.meross.com'  # Or 'https://iot-eu.meross.com' for Europe
 
-    # Erstellen eines HTTP-Clients mit Ihren Zugangsdaten und der API-URL
+    # Create an HTTP client with your credentials and API URL
     http_client = await MerossHttpClient.async_from_user_password(
         email=EMAIL,
         password=PASSWORD,
         api_base_url=api_base_url
     )
 
-    # Initialisieren des Managers mit dem HTTP-Client
+    # Initialize the manager with the HTTP client
     manager = MerossManager(http_client=http_client)
     await manager.async_init()
 
-    # Geräte entdecken
+    # Discover devices
     await manager.async_device_discovery()
     devices = manager.find_devices()
 
     if not devices:
-        print("Keine Geräte gefunden.")
+        print("No devices found.")
         manager.close()
         await http_client.async_logout()
         return
 
     try:
         while True:
-            # Iterieren über alle gefundenen Geräte
+            # Iterate over all found devices
             for device in devices:
-                # Versuchen, das Gerätemodell abzurufen
+                # Attempt to retrieve the device model
                 try:
                     model = device.type
                 except AttributeError:
-                    model = "Unbekannt"
+                    model = "Unknown"
 
-                if model == 'mss315':
-                    # print(f"\nGerät: '{device.name}', Modell: {model}")
+                # Check if the model is 'mss315'
+                if model != 'mss315':
+                    continue  # Skip this device if it's not the desired model
 
-                    # Überprüfen, ob das Gerät online ist
-                    if device.online_status == OnlineStatus.ONLINE:
-                        # Aktualisieren des Gerätezustands
-                        await device.async_update()
-                        # Überprüfen, ob das Gerät den Stromverbrauch messen kann
-                        if hasattr(device, 'async_get_instant_metrics'):
-                            try:
-                                electricity = await device.async_get_instant_metrics()
-                                power = int(electricity.power / 1000)  # Umwandlung von mW in W
-                                voltage = int(electricity.voltage / 1000)  # Umwandlung von mV in V
-                                current = int(electricity.current / 1000)  # Umwandlung von mA in A
-                                print(f"Aktueller Stromverbrauch von '{device.name}':")
-                                print(f"  Leistung: {power} W")
-                                print(f"  Spannung: {voltage} V")
-                                print(f"  Stromstärke: {current} A")
-                            except Exception as e:
-                                print(f"Fehler beim Abrufen des Stromverbrauchs von '{device.name}': {e}")
-                        #else:
-                            # print(f"Das Gerät '{device.name}' unterstützt keine Messung des Stromverbrauchs.")
+                print(f"\nDevice: '{device.name}', Model: {model}")
+
+                # Check if the device is online
+                if device.online_status == OnlineStatus.ONLINE:
+                    # Update the device state
+                    await device.async_update()
+                    # Check if the device supports power consumption measurement
+                    if hasattr(device, 'async_get_instant_metrics'):
+                        try:
+                            electricity = await device.async_get_instant_metrics()
+                            # Convert and round to integers
+                            power = int(electricity.power / 1000)    # Power in Watts as integer
+                            voltage = int(electricity.voltage / 1000)  # Voltage in Volts as integer
+                            current = int(electricity.current / 1000)  # Current in Amperes as integer
+                            print(f"Current power consumption of '{device.name}':")
+                            print(f"  Power: {power} W")
+                            print(f"  Voltage: {voltage} V")
+                            print(f"  Current: {current} A")
+                        except Exception as e:
+                            print(f"Error retrieving power consumption from '{device.name}': {e}")
                     else:
-                        print(f"Das Gerät '{device.name}' ist offline.")
+                        print(f"The device '{device.name}' does not support power consumption measurement.")
+                else:
+                    print(f"The device '{device.name}' is offline.")
 
-            # Warten Sie 10 Sekunden, bevor Sie erneut abfragen
-            await asyncio.sleep(60)
+            # Wait 10 seconds before querying again
+            await asyncio.sleep(10)
     except KeyboardInterrupt:
-        print("\nProgramm beendet durch Benutzer.")
+        print("\nProgram terminated by user.")
 
-    # Aufräumen
+    # Cleanup
     manager.close()
     await http_client.async_logout()
 
